@@ -28,6 +28,7 @@ frontend/.vite/
 *.sw?
 .DS_Store
 Thumbs.db
+*.db
 
 # Docker
 docker-compose.override.yml
