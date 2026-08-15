@@ -1,15 +1,22 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import tailwindcss from "@tailwindcss/vite";
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
-// https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react()],
   server: {
+    port: 5173,
+    host: '0.0.0.0',
+    strictPort: true,
+    cors: true,
+    origin: 'http://0.0.0.0:5173',
     proxy: {
-      "/api": {
-        target: "http://yacht-backend-1:8000",
+      '/api': {
+        target: 'http://backend:8000',
         changeOrigin: true,
+      },
+      '/ws': {
+        target: 'ws://backend:8000',
+        ws: true,
       },
     },
   },

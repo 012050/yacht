@@ -1,19 +1,26 @@
-import axios from "axios";
+import axios from 'axios';
 
 const api = axios.create({
-  baseURL: "/api",
-  headers: {
-    "Content-Type": "application/json",
-  },
+  baseURL: '/api',
+  withCredentials: true,
 });
 
-// ?? ????: JWT ?? ??
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("access_token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+// Normalize backend status ("playing"/"finished"/"waiting") to uppercase.
+api.interceptors.response.use((response) => {
+  const body = response.data;
+  if (body && typeof body === 'object') {
+    if (typeof body.status === 'string') {
+      body.status = body.status.toUpperCase();
+    }
+    if (Array.isArray(body) && body.length > 0 && body[0]?.status) {
+      body.forEach((item: { status?: string }) => {
+        if (typeof item.status === 'string') {
+          item.status = item.status.toUpperCase();
+        }
+      });
+    }
   }
-  return config;
+  return response;
 });
 
 export default api;

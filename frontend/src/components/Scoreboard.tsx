@@ -1,40 +1,174 @@
-import { useGameStore } from "../store/gameStore";
+import {
+  CATEGORIES,
+  UPPER_CATEGORIES,
+  LOWER_CATEGORIES,
+  PlayerInfo,
+  PlayerScoreboard,
+  Category,
+} from '../types/game';
+import { calculateScore } from '../utils/scoring';
 
-const labels: Record<string, string> = {
-  "1": "1", "2": "2", "3": "3", "4": "4", "5": "5", "6": "6",
-  "yacht": "요트", "four_of_a_kind": "4개 이상", "full_house": "풀하우스",
-  "small_straight": "스몰 스트레이트", "large_straight": "라지 스트레이트", "chance": "찬스"
+interface ScoreboardProps {
+  scoreboards: Record<string, PlayerScoreboard>;
+  players: PlayerInfo[];
+  currentPlayerId: string;
+  currentDice?: number[];
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  ones: 'Ones',
+  twos: 'Twos',
+  threes: 'Threes',
+  fours: 'Fours',
+  fives: 'Fives',
+  sixes: 'Sixes',
+  yacht: 'Yacht',
+  four_of_a_kind: 'Four of a Kind',
+  full_house: 'Full House',
+  small_straight: 'Small Straight',
+  large_straight: 'Large Straight',
+  chance: 'Chance',
 };
 
-export default function Scoreboard() {
-  const gameState = useGameStore((s) => s.gameState);
-  if (!gameState) return null;
+export default function Scoreboard({
+  scoreboards,
+  players,
+  currentPlayerId,
+  currentDice,
+}: ScoreboardProps) {
+  const getScore = (playerId: string, category: string) => {
+    const sb = scoreboards[playerId];
+    if (!sb) return null;
+    const entry = sb.entries.find((e) => e.category === category);
+    return entry ? entry.score : null;
+  };
 
-  const cats = ["1","2","3","4","5","6","yacht","four_of_a_kind","full_house","small_straight","large_straight","chance"];
-  let top = 0, bot = 0;
-  cats.forEach((c, i) => {
-    Object.values(gameState.scoreboards).forEach((s: any) => {
-      if (s[c] !== undefined) (i < 6 ? top += s[c] : bot += s[c]);
-    });
-  });
-  const bonus = top >= 63 ? 35 : 0;
+  const getPotentialScore = (category: Category) => {
+    if (!currentDice || currentDice.length !== 5) return null;
+    const sb = scoreboards[currentPlayerId];
+    if (sb && sb.entries.find((e) => e.category === category)) return null;
+    return calculateScore(category, currentDice);
+  };
+
+  const upperTotal = (playerId: string) =>
+    UPPER_CATEGORIES.reduce((sum, cat) => sum + (getScore(playerId, cat) ?? 0), 0);
+
+  const lowerTotal = (playerId: string) =>
+    LOWER_CATEGORIES.reduce((sum, cat) => sum + (getScore(playerId, cat) ?? 0), 0);
 
   return (
-    <div className="card col-span-2">
-      <h2 className="text-lg font-bold text-slate-800 mb-3">점수판</h2>
-      <div className="grid grid-cols-6 sm:grid-cols-12 gap-2 text-sm">
-        {cats.map((c) => (
-          <div key={c} className="bg-slate-50 rounded p-2 text-center border border-slate-100">
-            <div className="font-medium text-slate-600">{labels[c]}</div>
-          </div>
-        ))}
-      </div>
-      <div className="mt-4 flex gap-6 text-sm border-t pt-3">
-        <span>상단 합계: <b className="text-blue-600">{top}</b></span>
-        <span>하단 합계: <b className="text-purple-600">{bot}</b></span>
-        {bonus > 0 && <span>보너스: <b className="text-emerald-600">+{bonus}</b></span>}
-        <span className="ml-auto">총점: <b className="text-lg text-slate-900">{top + bot + bonus}</b></span>
-      </div>
+    <div className="bg-slate-800 rounded-lg p-4 overflow-x-auto">
+      <h2 className="text-lg font-bold mb-3">Scoreboard</h2>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-slate-600">
+            <th className="text-left py-2 px-2">Category</th>
+            {players.map((p) => (
+              <th
+                key={p.user_id}
+                className={`text-center py-2 px-2 ${
+                  p.user_id === currentPlayerId ? 'text-yellow-400 font-bold' : ''
+                }`}
+              >
+                {p.display_name}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {/* Upper section */}
+          {UPPER_CATEGORIES.map((cat) => (
+            <tr key={cat} className="border-b border-slate-700">
+              <td className="py-1 px-2 text-blue-300">{CATEGORY_LABELS[cat]}</td>
+              {players.map((p) => {
+                const score = getScore(p.user_id, cat);
+                const potential = p.user_id === currentPlayerId ? getPotentialScore(cat as Category) : null;
+                return (
+                  <td key={p.user_id} className="text-center py-1 px-2">
+                    {score !== null ? (
+                      score
+                    ) : potential !== null ? (
+                      <span className="text-green-400 text-xs">{potential}</span>
+                    ) : (
+                      '-'
+                    )}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+
+          {/* Upper subtotal */}
+          <tr className="bg-slate-700 font-bold">
+            <td className="py-2 px-2 text-blue-300">Upper Total</td>
+            {players.map((p) => (
+              <td key={p.user_id} className="text-center py-2 px-2 text-blue-300">
+                {upperTotal(p.user_id)}
+              </td>
+            ))}
+          </tr>
+
+          {/* Bonus */}
+          <tr className="bg-slate-700">
+            <td className="py-1 px-2 text-yellow-400">Bonus (+35)</td>
+            {players.map((p) => {
+              const total = upperTotal(p.user_id);
+              return (
+                <td key={p.user_id} className="text-center py-1 px-2 text-yellow-400">
+                  {total >= 63 ? '+35' : '0'}
+                </td>
+              );
+            })}
+          </tr>
+
+          {/* Lower section */}
+          {LOWER_CATEGORIES.map((cat) => (
+            <tr key={cat} className="border-b border-slate-700">
+              <td className="py-1 px-2 text-green-300">{CATEGORY_LABELS[cat]}</td>
+              {players.map((p) => {
+                const score = getScore(p.user_id, cat);
+                const potential = p.user_id === currentPlayerId ? getPotentialScore(cat as Category) : null;
+                return (
+                  <td key={p.user_id} className="text-center py-1 px-2">
+                    {score !== null ? (
+                      score
+                    ) : potential !== null ? (
+                      <span className="text-green-400 text-xs">{potential}</span>
+                    ) : (
+                      '-'
+                    )}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+
+          {/* Lower subtotal */}
+          <tr className="bg-slate-700 font-bold">
+            <td className="py-2 px-2 text-green-300">Lower Total</td>
+            {players.map((p) => (
+              <td key={p.user_id} className="text-center py-2 px-2 text-green-300">
+                {lowerTotal(p.user_id)}
+              </td>
+            ))}
+          </tr>
+
+          {/* Grand total */}
+          <tr className="bg-slate-600 font-bold text-lg">
+            <td className="py-3 px-2">Total</td>
+            {players.map((p) => {
+              const upper = upperTotal(p.user_id);
+              const lower = lowerTotal(p.user_id);
+              const bonus = upper >= 63 ? 35 : 0;
+              return (
+                <td key={p.user_id} className="text-center py-3 px-2">
+                  {upper + lower + bonus}
+                </td>
+              );
+            })}
+          </tr>
+        </tbody>
+      </table>
     </div>
   );
 }
