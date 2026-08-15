@@ -1,95 +1,47 @@
-"""
-JWT ?? ?? ???: ????, ???, ?? ??/??, ????
-"""
-
+"""Authentication helpers: password hashing, JWT creation/verification."""
+import bcrypt
 from datetime import datetime, timedelta, timezone
-from typing import Optional
-from jose import jwt, JWTError
-from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.orm import Session
-from app.database.db import get_db
-from app.database.models import User
-from app.schemas.user import UserCreate, UserLogin
+from jose import JWTError, jwt
+
 from app.core.config import settings
 
-pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
-security = HTTPBearer()
+ALGORITHM = "HS256"
 
+
+# ── Password hashing ──────────────────────────────────────────────────
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    """Hash a password using bcrypt."""
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    """Verify a password against a bcrypt hash."""
+    return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
 
+
+# ── Token helpers ─────────────────────────────────────────────────────
 
 def create_access_token(user_id: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    return jwt.encode({"sub": user_id, "exp": expire, "type": "access"}, settings.SECRET_KEY, settings.ALGORITHM)
+    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_ACCESS_EXPIRE_MINUTES)
+    return jwt.encode({"sub": user_id, "exp": expire, "type": "access"}, settings.SECRET_KEY, algorithm=ALGORITHM)
 
 
 def create_refresh_token(user_id: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-    return jwt.encode({"sub": user_id, "exp": expire, "type": "refresh"}, settings.SECRET_KEY, settings.ALGORITHM)
+    expire = datetime.now(timezone.utc) + timedelta(days=settings.JWT_REFRESH_EXPIRE_DAYS)
+    return jwt.encode({"sub": user_id, "exp": expire, "type": "refresh"}, settings.SECRET_KEY, algorithm=ALGORITHM)
 
 
-def decode_token(token: str) -> str:
-    """???? user_id ??. ?? ? HTTPException"""
-    try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        user_id = payload.get("sub")
-        if user_id is None:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="???? ?? ??")
-        return user_id
-    except JWTError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="????? ???? ?? ??")
+def decode_token(token: str) -> dict:
+    """Decode and verify a JWT token. Raises JWTError on failure."""
+    return jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
 
 
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db),
-) -> User:
-    """HTTP Bearer ???? ?? ??? ??"""
-    user_id = decode_token(credentials.credentials)
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="???? ?? ? ????.")
-    return user
-
-
-def register_user(db: Session, req: UserCreate) -> User:
-    """? ??? ??"""
-    if db.query(User).filter(User.username == req.username).first():
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="?? ???? ??????.")
-    if db.query(User).filter(User.nickname == req.nickname).first():
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="?? ???? ??????.")
-    import uuid
-    user = User(
-        id=str(uuid.uuid4()),
-        username=req.username,
-        nickname=req.nickname,
-        password_hash=hash_password(req.password),
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return user
-
-
-def login_user(db: Session, req: UserLogin) -> tuple[User, str, str]:
-    """???: ???/???? ?? ? ?? ??"""
-    user = db.query(User).filter(User.username == req.username).first()
-    if not user or not verify_password(req.password, user.password_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="??? ?? ????? ???????.")
-    access = create_access_token(user.id)
-    refresh = create_refresh_token(user.id)
-    return user, access, refresh
-
-
-def refresh_access_token(refresh_token: str) -> str:
-    """???? ???? ? ??? ?? ??"""
-    user_id = decode_token(refresh_token)
-    return create_access_token(user_id)
+def extract_token_from_cookie(cookie_header: str, token_name: str = "access_token") -> str | None:
+    """Extract a named token value from a raw Cookie header string."""
+    for chunk in cookie_header.split(";"):
+        chunk = chunk.strip()
+        if chunk.startswith(f"{token_name}="):
+            return chunk.split("=", 1)[1]
+    return None

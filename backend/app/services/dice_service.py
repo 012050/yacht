@@ -1,63 +1,38 @@
-"""
-??? ???/?? ??
-"""
-
+"""Dice rolling and state management."""
 import random
 
 
-def roll_dice(count: int) -> list[int]:
-    """5? ???? ?? 1~6? ?? ??? ??"""
-    return [random.randint(1, 6) for _ in range(count)]
+def roll_5_dice() -> list[int]:
+    """Return a list of 5 random integers in [1, 6]."""
+    return [random.randint(1, 6) for _ in range(5)]
 
 
-class DiceState:
-    def __init__(self):
-        self.dice: list[int] = []
-        self.kept_indices: set[int] = set()
-        self.rolls_left: int = 3
+def resolve_final_dice(
+    current_values: list[int], kept_indices: list[int]
+) -> list[int]:
+    """Resolve the dice used for a timed-out turn.
 
-    def roll(self) -> list[int]:
-        """?? ???? ??"""
-        if self.rolls_left <= 0:
-            raise ValueError("?? ??? ?? ?????.")
+    Kept dice stay as-is; the remaining dice are rolled once.
+    If no values were rolled yet, all 5 dice are rolled fresh.
+    """
+    if not current_values:
+        return roll_5_dice()
+    kept_set = set(kept_indices)
+    return [
+        current_values[i] if i in kept_set else random.randint(1, 6)
+        for i in range(5)
+    ]
 
-        unrolled_count = 5 - len(self.kept_indices)
-        if self.dice:
-            # ? ???? ?? ??: ???? ?? ???? ???
-            new_rolls = roll_dice(unrolled_count)
-            new_dice = []
-            new_idx = 0
-            for i in range(5):
-                if i in self.kept_indices:
-                    new_dice.append(self.dice[i])
-                else:
-                    new_dice.append(new_rolls[new_idx])
-                    new_idx += 1
-            self.dice = new_dice
-        else:
-            # ? ???
-            self.dice = roll_dice(5)
 
-        self.rolls_left -= 1
-        return self.dice[:]
-
-    def keep(self, indices: list[int]) -> None:
-        """??? ??? ??? ?? (0~4)"""
-        for idx in indices:
-            if idx < 0 or idx > 4:
-                raise ValueError(f"???? ?? ??? ???: {idx}")
-        self.kept_indices = set(indices)
-
-    def reset(self) -> None:
-        """? ?? ?? ?? ???"""
-        self.dice = []
-        self.kept_indices = set()
-        self.rolls_left = 3
-
-    def finish_early(self) -> list[int]:
-        """?? ??: ?? ??? ?? (?? ?? ?? ? ?)"""
-        return self.dice[:]
-
-    @property
-    def is_exhausted(self) -> bool:
-        return self.rolls_left <= 0 and len(self.dice) == 5
+def validate_keep_indices(indices: list[int], num_dice: int) -> bool:
+    """Validate that keep indices are valid for the current dice count."""
+    if not indices:
+        return True
+    if len(indices) > num_dice:
+        return False
+    for idx in indices:
+        if idx < 0 or idx >= num_dice:
+            return False
+    if len(indices) != len(set(indices)):
+        return False
+    return True

@@ -1,26 +1,17 @@
 from pydantic_settings import BaseSettings
+from pydantic import ConfigDict
 
 
 class Settings(BaseSettings):
-    # Database
-    DATABASE_URL: str = "sqlite:///./yacht.db"
+    model_config = ConfigDict(env_file=".env", env_file_encoding="utf-8")
 
-    # JWT
-    SECRET_KEY: str = "change-me-in-production-use-env-var"
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
-
-    # Game
-    DEFAULT_TIMEOUT_DURATION: int = 60
-    JOIN_CODE_LENGTH: int = 6
-
-    # Security
-    MAX_LOGIN_ATTEMPTS_PER_MINUTE: int = 10
-    MAX_GAME_ACTIONS_PER_MINUTE: int = 30
-    MAX_WEBSOCKET_MSGS_PER_SECOND: int = 10
-
-    model_config = {"env_prefix": "YACHT_"}
+    DATABASE_URL: str = "sqlite:////app/data/yacht.db"
+    SECRET_KEY: str = "change-me-to-a-random-secret-key"
+    JWT_ACCESS_EXPIRE_MINUTES: int = 30
+    JWT_REFRESH_EXPIRE_DAYS: int = 7
+    TURN_TIME_LIMIT: int = 60
+    # Comma-separated list of allowed CORS origins (empty = dev defaults).
+    CORS_ORIGINS: str = ""
 
 
 settings = Settings()

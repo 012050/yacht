@@ -1,17 +1,10 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class UserCreate(BaseModel):
-    username: str = Field(..., min_length=1, max_length=20)
-    nickname: str = Field(..., min_length=1, max_length=20)
-    password: str = Field(..., min_length=1, max_length=20)
-
-    @field_validator("username", "nickname", "password")
-    @classmethod
-    def alphanumeric_only(cls, v: str) -> str:
-        if not all(c.isalnum() or c in "-!@#$%^&*" for c in v):
-            raise ValueError("???, ??, ???(-)? ?????.")
-        return v
+    username: str = Field(min_length=1, max_length=20)
+    password: str = Field(min_length=4, max_length=100)
+    nickname: str = Field(min_length=1, max_length=20)
 
 
 class UserLogin(BaseModel):
@@ -20,14 +13,11 @@ class UserLogin(BaseModel):
 
 
 class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     username: str
     nickname: str
-
-    model_config = {"from_attributes": True}
-
-
-class Token(BaseModel):
-    access_token: str
-    refresh_token: str
-    token_type: str = "bearer"
+    total_games: int = 0
+    total_wins: int = 0
+    cumulative_score: int = 0

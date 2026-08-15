@@ -1,53 +1,69 @@
-"""
-HTTP ?????: ??? ??, ??, ?? ??
-"""
-
-from fastapi import APIRouter, Depends
+"""User routes: profile, session, leaderboard."""
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from app.database.db import get_db
+
+from app.core.dependencies import get_current_user, get_db
 from app.database.models import User
-from app.core.dependencies import get_current_user, get_user_id
-from app.schemas.game import UserStats
-from app.services.stats_service import get_user_stats, get_leaderboard
+from app.schemas.user import UserResponse
+from app.services.stats_service import get_leaderboard, get_user_stats
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
 
-@router.get("/me", response_model=UserStats)
-def get_profile(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    stats = get_user_stats(db, current_user.id)
-    return UserStats(
-        user_id=current_user.id,
-        username=current_user.username,
-        nickname=current_user.nickname,
-        games_played=stats["games_played"],
-        wins=stats["wins"],
-        win_rate=stats["win_rate"],
-        average_score=stats["average_score"],
-    )
-
-
-@router.get("/leaderboard")
-def leaderboard(db: Session = Depends(get_db)):
-    return get_leaderboard(db)
+@router.get("/me", response_model=UserResponse)
+async def get_my_profile(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return the current authenticated user's profile."""
+    return current_user
 
 
 @router.get("/session")
-def session_recovery(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """?? ?? ?? ?? ?? (?? ???)"""
-    from app.database.models import GamePlayer
+async def get_session(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return session info including user profile and active games."""
+    from app.database.models import Game, GamePlayer
+
     active_games = (
         db.query(Game)
         .join(GamePlayer, Game.id == GamePlayer.game_id)
         .filter(GamePlayer.user_id == current_user.id)
-        .filter(Game.state.in_(["created", "waiting", "playing"]))
+        .filter(Game.status.in_(["waiting", "playing"]))
         .all()
     )
-    return [
+
+    games = [
         {
-            "game_id": g.id,
-            "state": g.state,
+            "id": g.id,
             "join_code": g.join_code,
+            "status": g.status,
+            "current_round": g.current_round,
         }
         for g in active_games
     ]
+
+    return {
+        "user": UserResponse.model_validate(current_user).model_dump(),
+        "active_games": games,
+    }
+
+
+@router.get("/leaderboard")
+async def get_leaderboard_endpoint(
+    limit: int = 20,
+    db: Session = Depends(get_db),
+):
+    """Return the global leaderboard sorted by cumulative score."""
+    return get_leaderboard(db, limit=limit)
+
+
+@router.get("/stats")
+async def get_my_stats(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return the current user's detailed stats."""
+    return get_user_stats(db, current_user.id)

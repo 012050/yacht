@@ -1,125 +1,162 @@
-"""
-12? ???? ?? ?? ??. ?? ??? ???? ???? ?????.
-?? ??: game-rules.md ??
-"""
-
+"""Pure scoring functions for Yacht. Follows game-rules.md exactly."""
 from collections import Counter
+from typing import Tuple
 
+from sqlalchemy.orm import Session
 
-def score_numbers(dice: list[int], number: int) -> int:
-    """??? ????: ?? ?? ?? x ?? ??"""
-    return dice.count(number) * number
-
-
-def score_yacht(dice: list[int]) -> int:
-    """??: 5?? ?? ??? 50?, ??? 0?"""
-    return 50 if len(set(dice)) == 1 else 0
-
-
-def score_four_of_a_kind(dice: list[int]) -> int:
-    """? ? ?? ?: ?? ?? 4? ???? ?? ?? ??? ? + 1"""
-    counts = Counter(dice)
-    for face, count in counts.items():
-        if count >= 4:
-            return face * count + 1
-    return 0
-
-
-def score_full_house(dice: list[int]) -> int:
-    """????: 3? + 2? ???? 25?"""
-    counts = list(Counter(dice).values())
-    if sorted(counts) == [2, 3]:
-        return 25
-    return 0
-
-
-def score_small_straight(dice: list[int]) -> int:
-    """?? ?????: 4? ?? ???? 30?"""
-    unique = sorted(set(dice))
-    for i in range(len(unique) - 3):
-        if unique[i + 3] - unique[i] == 3 and all(
-            unique[i + k] == unique[i] + k for k in range(4)
-        ):
-            return 30
-    return 0
-
-
-def score_large_straight(dice: list[int]) -> int:
-    """?? ?????: 5? ???? 40?"""
-    unique = sorted(set(dice))
-    if len(unique) == 5 and unique[-1] - unique[0] == 4:
-        return 40
-    return 0
-
-
-def score_chance(dice: list[int]) -> int:
-    """??: ??? ?? ?"""
-    return sum(dice)
-
+from app.database.models import Scoreboard
 
 CATEGORIES = [
-    "1", "2", "3", "4", "5", "6",
+    "ones", "twos", "threes", "fours", "fives", "sixes",
     "yacht", "four_of_a_kind", "full_house",
     "small_straight", "large_straight", "chance",
 ]
 
-SCORING_FUNCTIONS = {
-    "1": lambda d: score_numbers(d, 1),
-    "2": lambda d: score_numbers(d, 2),
-    "3": lambda d: score_numbers(d, 3),
-    "4": lambda d: score_numbers(d, 4),
-    "5": lambda d: score_numbers(d, 5),
-    "6": lambda d: score_numbers(d, 6),
-    "yacht": score_yacht,
-    "four_of_a_kind": score_four_of_a_kind,
-    "full_house": score_full_house,
-    "small_straight": score_small_straight,
-    "large_straight": score_large_straight,
-    "chance": score_chance,
+UPPER_CATEGORIES = ["ones", "twos", "threes", "fours", "fives", "sixes"]
+LOWER_CATEGORIES = [
+    "yacht", "four_of_a_kind", "full_house",
+    "small_straight", "large_straight", "chance",
+]
+
+
+# ── Upper section ─────────────────────────────────────────────────────
+
+def calculate_ones(dice: list[int]) -> int:
+    return dice.count(1) * 1
+
+
+def calculate_twos(dice: list[int]) -> int:
+    return dice.count(2) * 2
+
+
+def calculate_threes(dice: list[int]) -> int:
+    return dice.count(3) * 3
+
+
+def calculate_fours(dice: list[int]) -> int:
+    return dice.count(4) * 4
+
+
+def calculate_fives(dice: list[int]) -> int:
+    return dice.count(5) * 5
+
+
+def calculate_sixes(dice: list[int]) -> int:
+    return dice.count(6) * 6
+
+
+# ── Lower section ─────────────────────────────────────────────────────
+
+def calculate_yacht(dice: list[int]) -> int:
+    return 50 if len(set(dice)) == 1 else 0
+
+
+def calculate_four_of_a_kind(dice: list[int]) -> int:
+    """If any eye appears >= 4 times: sum of ALL matching dice + 1, else 0."""
+    counts = Counter(dice)
+    for eye, count in counts.items():
+        if count >= 4:
+            return eye * count + 1
+    return 0
+
+
+def calculate_full_house(dice: list[int]) -> int:
+    """3 of one eye + 2 of another eye = 25, else 0."""
+    counts = sorted(Counter(dice).values())
+    return 25 if counts == [2, 3] else 0
+
+
+def calculate_small_straight(dice: list[int]) -> int:
+    """4 consecutive unique values = 30, else 0."""
+    unique = sorted(set(dice))
+    consecutive_run = 1
+    max_run = 1
+    for i in range(1, len(unique)):
+        if unique[i] == unique[i - 1] + 1:
+            consecutive_run += 1
+            max_run = max(max_run, consecutive_run)
+        else:
+            consecutive_run = 1
+    return 30 if max_run >= 4 else 0
+
+
+def calculate_large_straight(dice: list[int]) -> int:
+    """5 consecutive unique values (1-5 or 2-6) = 40, else 0."""
+    unique = sorted(set(dice))
+    if unique == [1, 2, 3, 4, 5] or unique == [2, 3, 4, 5, 6]:
+        return 40
+    return 0
+
+
+def calculate_chance(dice: list[int]) -> int:
+    return sum(dice)
+
+
+# ── Dispatch map ──────────────────────────────────────────────────────
+
+CATEGORY_MAP = {
+    "ones": calculate_ones,
+    "twos": calculate_twos,
+    "threes": calculate_threes,
+    "fours": calculate_fours,
+    "fives": calculate_fives,
+    "sixes": calculate_sixes,
+    "yacht": calculate_yacht,
+    "four_of_a_kind": calculate_four_of_a_kind,
+    "full_house": calculate_full_house,
+    "small_straight": calculate_small_straight,
+    "large_straight": calculate_large_straight,
+    "chance": calculate_chance,
 }
 
-TOP_CATEGORIES = {"1", "2", "3", "4", "5", "6"}
-BOTTOM_CATEGORIES = {"yacht", "four_of_a_kind", "full_house", "small_straight", "large_straight", "chance"}
+
+def calculate_score(category: str, dice: list[int]) -> int:
+    """Dispatch to the correct scoring function for a category."""
+    func = CATEGORY_MAP.get(category)
+    if func is None:
+        raise ValueError(f"Unknown category: {category}")
+    return func(dice)
 
 
-def calculate_score(dice: list[int], category: str) -> int:
-    """??? ???? ????? ?? ??? ?????."""
-    if category not in SCORING_FUNCTIONS:
-        raise ValueError(f"???? ?? ????: {category}")
-    return SCORING_FUNCTIONS[category](dice)
+# ── Bonus ─────────────────────────────────────────────────────────────
+
+def calculate_bonus(upper_total: int) -> int:
+    """35 bonus if upper section total >= 63, else 0."""
+    return 35 if upper_total >= 63 else 0
 
 
-def calculate_best_category(dice: list[int], used_categories: set[str]) -> tuple[str, int] | None:
+# ── Auto-select ───────────────────────────────────────────────────────
+
+def auto_select_category(
+    dice: list[int],
+    user_id: str,
+    game_id: str,
+    session: Session,
+) -> Tuple[str, int]:
+    """Find the best available category for the current dice.
+
+    Returns (category, score). If all categories are taken returns ("chance", 0).
     """
-    ?? ??? ???? ? ?? ?? ??? ?????.
-    (???? ?? ???)
-    """
-    available = [c for c in CATEGORIES if c not in used_categories]
-    if not available:
-        return None
+    used = {
+        row.category
+        for row in session.query(Scoreboard)
+        .filter_by(game_id=game_id, user_id=user_id)
+        .all()
+    }
 
-    best = None
+    best_category: str | None = None
     best_score = -1
-    for cat in available:
-        s = SCORING_FUNCTIONS[cat](dice)
-        if s > best_score:
-            best_score = s
-            best = cat
-        elif s == best_score and s > 0 and CATEGORIES.index(cat) < CATEGORIES.index(best):
-            best = cat
 
-    return (best, best_score) if best else (available[0], 0)
+    for cat in CATEGORIES:
+        if cat in used:
+            continue
+        score = calculate_score(cat, dice)
+        if score > best_score:
+            best_score = score
+            best_category = cat
 
+    # All categories used — record 0 in chance as a fallback.
+    if best_category is None:
+        return "chance", 0
 
-def calculate_bonus(scores: dict[str, int]) -> int:
-    """?? ??? 63? ???? 35? ??? ??"""
-    top_sum = sum(scores.get(c, 0) for c in TOP_CATEGORIES)
-    return 35 if top_sum >= 63 else 0
-
-
-def calculate_total(scores: dict[str, int]) -> int:
-    """?? = ?? ?? + ?? ?? + ???"""
-    top_sum = sum(scores.get(c, 0) for c in TOP_CATEGORIES)
-    bottom_sum = sum(scores.get(c, 0) for c in BOTTOM_CATEGORIES)
-    bonus = calculate_bonus(scores)
-    return top_sum + bottom_sum + bonus
+    return best_category, best_score

@@ -1,12 +1,29 @@
-from pydantic import BaseModel
-from typing import Any
+# WebSocket message type constants
+STATE_UPDATE = "STATE_UPDATE"
+DICE_ROLL = "DICE_ROLL"
+DICE_KEEP = "DICE_KEEP"
+SELECT_CATEGORY = "SELECT_CATEGORY"
+TIME_EXPIRED = "TIME_EXPIRED"
+GAME_STARTED = "GAME_STARTED"
+GAME_FINISHED = "GAME_FINISHED"
+ERROR = "ERROR"
+TIMER_UPDATE = "TIMER_UPDATE"
+PLAYER_LEFT = "PLAYER_LEFT"
+
+ALL_TYPES = {
+    STATE_UPDATE,
+    DICE_ROLL,
+    DICE_KEEP,
+    SELECT_CATEGORY,
+    TIME_EXPIRED,
+    GAME_STARTED,
+    GAME_FINISHED,
+    ERROR,
+    TIMER_UPDATE,
+    PLAYER_LEFT,
+}
 
 
-class ClientMessage(BaseModel):
-    type: str  # ROLL, KEEP, FINISH_ROLLS, SELECT_CATEGORY, PASS, LEAVE, SESSION_RECOVER
-    payload: dict[str, Any] = {}
-
-
-class ServerMessage(BaseModel):
-    type: str  # STATE_UPDATE, PLAYER_JOINED, PLAYER_LEFT, GAME_STARTED, GAME_FINISHED, TIME_WARNING, TIME_EXPIRED, SESSION_RECOVERED, ERROR
-    payload: dict[str, Any] = {}
+def build_ws_message(msg_type: str, payload: dict) -> dict:
+    """Build a standard WebSocket message dict."""
+    return {"type": msg_type, "payload": payload}
