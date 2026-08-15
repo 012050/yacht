@@ -1,24 +1,28 @@
-version: '3.8'
-
 services:
   backend:
     build:
       context: ./backend
+      dockerfile: Dockerfile
+    container_name: yacht-backend
     ports:
       - "8000:8000"
     volumes:
-      - ./backend/app:/app/app
+      - ./backend/data:/app/data
     environment:
-      - DATABASE_URL=sqlite:///./yacht.db
+      - DATABASE_URL=sqlite:////app/data/yacht.db
+      - SECRET_KEY=${SECRET_KEY:-yacht-dev-secret-key-change-in-production}
+      - JWT_ACCESS_EXPIRE_MINUTES=30
+      - JWT_REFRESH_EXPIRE_DAYS=7
+      - TURN_TIME_LIMIT=60
+    restart: unless-stopped
 
   frontend:
-    image: node:20-alpine
-    working_dir: /app
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: yacht-frontend
     ports:
-      - "5173:5173"
-    command: sh -c "npm install && npm run dev -- --host"
+      - "5173:80"
     depends_on:
       - backend
+    restart: unless-stopped

@@ -34,7 +34,8 @@ Yacht는 5개 주사위를 최대 3회 굴려 12개 카테고리 중 하나에 �
 | Auth | JWT (Access + Refresh Token) |
 | Frontend | React 18+, TypeScript, Vite |
 | Real-time | WebSocket (FastAPI WebSocket endpoint) |
-| Database | SQLite (SQLAlchemy ORM, WAL 모드) |
+| Database | SQLite (SQLAlchemy ORM, WAL 모드, Alembic 마이그레이션) |
+| Config   | python-dotenv (.env 파일 기반 설정) |
 | State Management | Zustand (simple, lightweight) |
 | Styling | Tailwind CSS |
 | Testing | pytest (backend), Vitest (frontend) |
@@ -187,11 +188,13 @@ WAL(Write-Ahead Log) 모드를 사용하여 동시 읽기 성능을 높이고 �
 | GET | ``/api/users/me${bt}` | 현재 사용자 프로필/통계 조회 |
 | GET | ``/api/users/leaderboard${bt}` | 전체 플레이어 랭킹 (누적 점수/승률 기준) |
 | POST | ``/api/games${bt}` | 새 게임 생성, 게임 ID + 방장 설정 반환 |
-| POST | ``/api/games/{id}/join${bt}` | 게임 참가 (인증 필요) |
+| POST | ``/api/games/join${bt}` | 게임 참가 (join_code 기반, 인증 필요) |
 | GET | ``/api/games/{id}${bt}` | 게임 정보 조회 (상태, 플레이어 목록) |
 | DELETE | ``/api/games/{id}/leave${bt}` | 게임 퇴장 |
 | POST | ``/api/games/{id}/start${bt}` | 게임 시작 (방장만, 최소 2명 필요) |
 | PUT | ``/api/games/{id}/settings${bt}` | 게임 설정 변경 (방장만, 시간 제한 조정) |
+| GET  | ``/api/users/session${bt}`` | 현재 사용자의 세션 정보 조회 (세션 복구용) |
+| GET  | ``/ws/{game-id}${bt}`` | WebSocket 연결 (게임별) |
 
 ### 4.3 WebSocket Protocol
 
@@ -489,6 +492,7 @@ CREATE TABLE users (
 CREATE TABLE games (
     id TEXT PRIMARY KEY,              -- UUID
     host_user_id TEXT NOT NULL,       -- 방장 ID
+    join_code TEXT NOT NULL UNIQUE,   -- 참여 코드 (6자리 영문+숫자)
     status TEXT NOT NULL DEFAULT 'WAITING',
     current_player_index INTEGER DEFAULT 0,
     current_round INTEGER DEFAULT 1,
@@ -651,7 +655,7 @@ CREATE TABLE game_results (
 - HTTP API: CSRF ?? ?? ?? (SameSite Cookie + CSRF token ??)
 - WebSocket: JWT ?? ? ?? ?? (CSRF?? ??, bidirectional channel)
 - Cookie ??: `SameSite=Lax`, `HttpOnly`, `Secure`(????)
-- CORS: ????? ???? ?? ( whitelist ??)
+- CORS: 모든 origin 허용 (whitelist 없음, 개발 편의성 우선)
 
 ## 13. Results Screen & Session Recovery
 
@@ -689,7 +693,7 @@ interface ResultPlayer {
 
 **?? ??**:
 
-1. **?? ??**: localStorage? Access/Refresh ??? ????? ??
+1. **?? ??**: HttpOnly 쿠키? Access/Refresh ??? ????? ??
 2. **?? ??**: Access ?? ?? ? Refresh ???? ?? (`/api/auth/refresh`)
 3. **?? ?? ??**: `GET /api/users/session` ?? ? ?? ??? ?? ?? ?? ??
 4. **?? ??**: ?? ??? 1?? ?? ??, ?? ?? ?? UI ??
@@ -737,3 +741,23 @@ interface ResultPlayer {
 ### 12.2 Open Questions
 
 (?? ?? ?? ??)
+
+---
+
+## Decisions Added 2026-08-12
+
+### Resolved
+
+- **Timer auto-roll behavior**: When a player's turn times out, roll remaining (non-kept) dice exactly **once**, then auto-select the best available category. Do not exhaust remaining roll count.
+- **Timer reset on re-roll**: Timer resets to 60 seconds on each re-roll (not cumulative).
+- **Database persistence**: SQLite file stored at `./backend/data/yacht.db`, mounted via Docker volume so data survives container restarts.
+- **JWT storage**: HttpOnly cookies only. No localStorage for tokens.
+- **JWT secret**: Loaded from `.env` file via `python-dotenv`.
+- **CORS**: Allow all origins (no whitelist restriction).
+- **Database migrations**: Use Alembic (version-controlled schema changes, easy column modifications, standard practice for SQLAlchemy projects).
+- **Display name**: Use `users.nickname` directly as `display_name` in game contexts.
+- **Game states**: CREATED state removed. Games start directly in WAITING state.
+- **Join endpoint**: Unified to `POST /api/games/join` (join_code based). Removed `/api/games/{id}/join`.
+- **Join code generation**: Generated immediately when `POST /api/games` is called (not deferred to game start).
+- **WebSocket path**: `/ws/{game-id}` for per-game WebSocket connections.
+- **WebSocket STATE_UPDATE schema**: Define inline during Phase 2 implementation.

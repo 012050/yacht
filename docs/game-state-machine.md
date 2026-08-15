@@ -4,8 +4,7 @@
 
 | State | Description | Valid Transitions |
 |-------|-------------|-------------------|
-| `CREATED` | 호스트가 게임 생성, 플레이어 초대 중 | → WAITING |
-| `WAITING` | 최소 2명 참여 완료, 호스트의 시작 대기 | → PLAYING |
+| `WAITING` | 게임 생성, 플레이어 참여 완료, 호스트의 시작 대기 | → PLAYING |
 | `PLAYING` | 게임 진행 중 (플레이어 턴 교대) | → FINISHED |
 | `FINISHED` | 모든 플레이어의 12개 카테고리 완료 | (none, terminal state) |
 
@@ -13,7 +12,6 @@
 
 | From | To | Trigger | Action |
 |------|-----|---------|--------|
-| CREATED | WAITING | 2명 이상 플레이어가 참여 | Waiting Room 활성화, 호스트에게 "시작" 버튼 표시 |
 | WAITING | PLAYING | 호스트가 "시작" 버튼 클릭 | 플레이어 순서 무작위 셔플, 1라운드 시작, 첫 플레이어 턴 시작 |
 | PLAYING | FINISHED | 모든 플레이어의 12개 카테고리 모두 채움 | 최종 점수 계산, 승자 결정 |
 | PLAYING | PLAYING | 턴 전환 (현재 플레이어의 턴 종료) | 다음 플레이어의 턴 시작 |
@@ -37,7 +35,7 @@
 
 - **유효한 카테고리 선택**: 점수 계산 → 기록 → 턴 종료 → 다음 플레이어
 - **PASS 선택**: 해당 카테고리 0점 기록 → 턴 종료 → 다음 플레이어
-- **60초 타임아웃**: 현재 주사위 상태로 자동 카테고리 선택 (보관한 주사위 유지, 남은 주사위 자동 굴리 후 가장 높은 점수 카테고리 자동 기록) → 턴 종료 → 다음 플레이어
+- **60초 타임아웃**: 현재 주사위 상태로 자동 카테고리 선택 (보관한 주사위 유지, 남은 주사위를 1회만 자동 굴린 후 가장 높은 점수 카테고리 자동 기록) → 턴 종료 → 다음 플레이어
 
 ## 4. Edge Cases
 
@@ -84,7 +82,6 @@ from enum import Enum
 from typing import Optional
 
 class GameState(str, Enum):
-    CREATED = "created"
     WAITING = "waiting"
     PLAYING = "playing"
     FINISHED = "finished"
@@ -97,7 +94,7 @@ class PlayerInfo:
 
 class GameSession:
     id: str                          # Game ID (UUID)
-    state: GameState                 # CREATED, WAITING, PLAYING, FINISHED
+    state: GameState                 # WAITING, PLAYING, FINISHED
     host_user_id: str               # Current host
     players: list[PlayerInfo]       # Player list (shuffled when game starts)
     current_player_index: int       # Current turn player index (0-based)
@@ -132,7 +129,7 @@ class GameSession:
 | Event | Timer Action |
 |-------|--------------|
 | 턴 시작 | 60초 타이머 시작 |
-| 주사위 재던짐 | 타이머 유지 (리셋 아님) |
+| 주사위 재던짐 | 60초 타이머 리셋 |
 | 턴 종료 (카테고리 선택) | 타이머 중지 |
 | ???? (60? ??) | ?? ???? ?? (?? ??), ??? ?? |
 | 다음 플레이어 턴 시작 | 60초 타이머 재시작 |
